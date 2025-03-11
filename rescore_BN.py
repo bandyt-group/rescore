@@ -1,0 +1,393 @@
+import numpy as np
+from scipy.spatial import cKDTree
+from scipy.special import digamma
+import scipy.spatial as ss
+import networkx as nx
+from networkx.drawing.nx_pydot import read_dot
+from networkx.algorithms.moral import moral_graph
+from functools import partial
+import os
+import csv
+import itertools
+import multiprocessing
+#from entropy_estimators_continuos import condMutInf_mixed_multid
+
+## Data Loader ##
+def csvreader(inputfile):
+    out = []
+    with open(inputfile, newline = '') as file:
+        reader = csv.reader(file)
+        for i,row in enumerate(reader):
+            out.append(row)
+    return np.array(out)
+
+def csvwriter(outfile,data):
+    with open(outfile, 'w', newline='') as csvfile:
+        csv_writer = csv.writer(csvfile)
+        for row in data:
+            csv_writer.writerow(row)
+
+## Entropy and Mutual Information Functions **See bottom of code for Cont MI**  ##
+
+def encode(c):
+    try:
+        b=np.ones(c.shape[1],dtype=int)
+    except Exception:
+        c=np.column_stack(c)
+        b=np.ones(c.shape[1],dtype=int)
+    b[:-1]=np.cumprod((c[:,1:].max(0)+1)[::-1])[::-1]
+    return np.sum(b*c,1)
+
+
+def mi(A):
+    X,Y=A
+    return H(X)+H(Y)-joinH((X,Y))
+
+def H(i):
+        """entropy of labels"""
+        p=np.unique(i,return_counts=True)[1]/i.size
+        return -np.sum(p*np.log2(p))
+
+def joinH(i):
+    pair=np.column_stack((i))
+    en=encode(pair)
+    p=np.unique(en,return_counts=True)[1]/len(en)
+    return -np.sum(p*np.log2(p))
+
+## Parallel Function ##
+
+def runParallel(foo,iter,ncore):
+    pool=multiprocessing.Pool(processes=ncore)
+    try:
+        out=(pool.map_async( foo,iter )).get()
+    except KeyboardInterrupt:
+        print ("Caught KeyboardInterrupt, terminating workers")
+        pool.terminate()
+        pool.join()
+    else:
+        #print ("Quitting normally core used ",ncore)
+        pool.close()
+        pool.join()
+    try:
+        return out
+    except Exception:
+        return out
+
+def readDot(f):
+    return nx.DiGraph(read_dot(f))
+
+def knn(data, k):
+    tree = cKDTree(data)
+    distances, indices = tree.query(data, k=k+1)
+    return distances[:,1:], indices[:,1:]
+
+def getlabelarray(lengths):
+    k=np.array([np.sum(lengths[:i]) for i in range(len(lengths)+1)]).astype(int)
+    int_indx=[(k[i],k[i+1]) for i in range(len(k)-1)]
+    q=np.ones(k[-1])
+    for i in range(len(int_indx)):
+        q[int_indx[i][0]:int_indx[i][1]]=i
+    return q
+
+class BN_Rescore:
+    def __init__(self,dotfile,files=None,data=None,lengths=None,subsets=None,discrete=False):
+        ## combine csv files ##
+        if files is not None:
+            self.concat=[]
+            for i,f in enumerate(files):
+                out=csvreader(f)
+                if i==0:
+                    self.concat=out[0]
+                self.concat=np.vstack((self.concat,out[1:].astype(float)))
+            data=self.concat                
+
+        ## Subset labels ##
+        if subsets != 'spatial':
+            if lengths is not None:
+                labelcol=np.insert(getlabelarray(lengths).astype(str),0,'label')
+                data=np.column_stack((data,labelcol))
+            self.subset_labels=data[1:,-1]
+            self.subset_label_set=np.sort(list(set(self.subset_labels)))
+            self.subset_labels_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set]
+        
+        ## Input variables and data with sorting ##
+        self._input_data=data[1:]#.astype(float)
+        self._input_variables=data[0,:-1]
+        i_sort=np.argsort(self._input_variables)
+        self.variables=self._input_variables[i_sort]
+        self.data=self._input_data[:,i_sort]
+        self.n_cells=self.data.shape[0]
+        
+        ## Graph input from dotfile and reading nodes and edges ##
+        self.G=readDot(dotfile)
+        self.nodes=np.array(list(self.G.nodes()))
+        self.edges=np.array(list(self.G.edges()))
+        self.varsNotInG=np.setdiff1d(self.variables,self.nodes)
+
+        if len(self.varsNotInG)>0:
+            i=~np.in1d(self.variables,self.varsNotInG)
+            self.data=self.data[:,i]
+            self.variables=self.variables[i]
+        self.mapVarNodes=np.searchsorted(self.variables,self.nodes)
+        self.n_nodes=len(self.G.nodes)
+        self.n_variables=len(self.variables)
+        self.G_moral=moral_graph(self.G)
+        self.map_variable=dict(zip(self.variables,np.arange(self.variables.size)))
+
+## RESCORING function ##
+    def rescore(self,datatype=None,subsets='all',ncore=1):
+        if datatype is None:
+            print('provide datatype= as either - "discrete" or "continuous"')
+        if datatype=='discrete':
+            self.rescored_out=self.disc_MI_on_subsets(subsets=subsets,ncore=ncore)
+            return
+        if datatype=='continuous':
+            self.rescored_out=self.cont_MI_on_subsets(subsets=subsets,ncore=ncore)
+            return
+
+
+## Discrete data MI functions ##
+    def mi_on_edge(self,u,v):
+        if u not in self.map_variable:
+            return 0
+        if v not in self.map_variable:
+            return 0
+        x=self.data[:,self.map_variable[u]]
+        y=self.data[:,self.map_variable[v]]
+        return mi([x,y])
+    def _mi_on_edge_subset_data(self,edge,subset):
+        u,v=edge
+        x=self.data[subset,self.map_variable[u]]
+        y=self.data[subset,self.map_variable[v]]
+        return mi([x,y])
+    def disc_MI_on_edges(self,edges,subset,ncore=4):
+        func=partial(self._mi_on_edge_subset_data,subset=subset)
+        return runParallel(func,edges,ncore)
+    def disc_MI_on_subsets(self,edges=None,subsets=None,moral=False,k_bin=5,ncore=4):
+        if edges is None:
+            edges=self.G.edges
+        if moral:
+            edges=self.G_moral.edges
+        if subsets is None:
+            subset=np.arange(self.n_cells)
+            return self.disc_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
+        if subsets == 'all':
+            subsets=self.subset_labels_indx
+        return [self.disc_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
+
+
+### Continuous MI Functions ###
+
+    def mi_Mixed_KSGm_on_edge(self,edge,k_bin=5):
+        u,v=edge
+        x=self.data[:,self.map_variable[u]]
+        y=self.data[:,self.map_variable[v]]
+        if len(set(x))==1:
+            return 0.0
+        if len(set(y))==1:
+            return 0.0
+        return Mixed_KSGm(x,y,k_bin)
+    def _mi_Mixed_KSGm_on_edge_subset_data(self,edge,subset,k_bin=5):
+        u,v=edge
+        x=self.data[subset,self.map_variable[u]]
+        y=self.data[subset,self.map_variable[v]]
+        if len(set(x))==1:
+            return 0.0
+        if len(set(y))==1:
+            return 0.0
+        return Mixed_KSGm(x,y,k_bin)
+    def cont_MI_on_edges(self,edges,subset,k_bin=5,ncore=1):
+        func=partial(self._mi_Mixed_KSGm_on_edge_subset_data,subset=subset,k_bin=k_bin)
+        return runParallel(func,edges,ncore)
+    def cont_MI_on_subsets(self,edges=None,subsets=None,moral=False,k_bin=5,ncore=1):
+        if edges is None:
+            edges=self.G.edges
+        if moral:
+            edges=self.G_moral.edges
+        if subsets is None:
+            subset=np.arange(self.n_cells)
+            return self.cont_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
+        if subsets == 'all':
+            subsets=self.subset_labels_indx
+        return [self.cont_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
+    
+## Spatial Continuous Data Functions ##
+    def _mi_Mixed_KSGm_spatial(self,kernal,edge,k_bin=5):
+        u,v=edge
+        x=self.data[kernal,self.map_variable[u]]
+        y=self.data[kernal,self.map_variable[v]]
+        if len(set(x))==1:
+            return 0.0
+        if len(set(y))==1:
+            return 0.0
+        return Mixed_KSGm(x,y,k_bin)
+
+    def run_kernals(self,edge,kernals):
+        return np.array([self._mi_Mixed_KSGm_spatial(k,edge) for k in kernals])
+
+    def cont_MI_on_subset(self,edge,kernals,k_bin=5,ncore=20):
+        func=partial(self._mi_Mixed_KSGm_spatial,edge=edge)
+        return runParallel(func,kernals,ncore=ncore)
+
+    def cont_MI_on_spatial(self,edges=None,kernals=None,moral=False,k_bin=5,ncore=1):
+        if edges is None:
+            edges=self.edges
+        if moral:
+            edges=self.G_moral.edges
+        func=partial(self.run_kernals,kernals=kernals)
+        return np.array(runParallel(func,edges,ncore))
+
+## Writing Rescored to output table ##
+    def table(self):
+        self.table=self.edges
+        for i,s in enumerate(self.subset_labels_indx):
+            self.table=np.column_stack((self.table,self.rescored_out[i]))
+    def table_write(self,outfile):
+        self.table()
+        subset_labels=np.array([f'subset{i+1}' for i in range(len(self.subset_labels_indx))])
+        title_row=np.insert(subset_labels,0,np.array(['source','target']))
+        csvwriter(outfile,np.vstack((title_row,self.table)))
+
+## Weighted degree ##
+    def _get_map2adj(self,is_moral=False):
+            edges=self.G.edges
+            if is_moral:
+                edges=self.G_moral.edges
+            return tuple(zip(*[[self.map_variable[u],self.map_variable[v]] for u,v in  edges]))
+    def conpute_wd(self,edge_scores,map2adj):
+        A=np.zeros((self.n_variables,self.n_variables))
+        A[map2adj]=edge_scores
+        return A.sum(1)
+
+    def conputeAll_wd(self, edge_scores=None,is_moral=False, foo=None,**args):
+        """"" return wd for each subset""""" 
+        if edge_scores is None:
+            print('computing edges_scores')
+            edge_scores=foo(**args)
+        map2adj=self._get_map2adj(is_moral)
+        return np.array([self.conpute_wd(scores,map2adj) for scores in edge_scores])
+
+## Partial MI functions ##
+    def _pmi_on_node_all_subsets(self,node,k_bin,subsets=None):
+        all_pa=list(self.G.predecessors(node))
+        n_pa=len(all_pa)
+        if len(all_pa)==0:
+            return None
+        data_pa=np.array([self.data[:,self.map_variable[u]] for u in all_pa if u in self.map_variable]).T
+        data_child=self.data[:,self.map_variable[node]]
+        if subsets is None:
+            subsets=[np.arange(self.n_cells)]
+        if n_pa == 1:
+            pmi=[Mixed_KSGm(data_child[subset],data_pa[subset],k_bin) for subset in subsets]
+            return [[(all_pa[0],node),pmi]]
+        if n_pa == 2:
+            pmi=np.array([[condMutInf_mixed_multid(k_bin,data_child[subset],data_pa[subset,i],self.data[subset,j]) for i,j in ((0,1),(1,0)) ] for subset in subsets]).T
+            return [[(pai,node),pmi_i] for pai,pmi_i in zip(all_pa,pmi)]
+        all_parents_but_one=list(itertools.combinations(data_pa.T,n_pa-1))
+        pmi=[[condMutInf_mixed_multid(k_bin,data_child[subset],data_pa[subset,i],np.column_stack(Z)[subset]) for i,Z in enumerate(all_parents_but_one) ] for subset in subsets]
+
+        return [[(pai,node),pmi_i] for pai,pmi_i in zip(all_pa[::-1],pmi)]
+
+    def pmi_bn(self,k_bin=3,subsets=None,ncore=-1):
+        foo_pmi=partial(self._pmi_on_node_all_subsets,k_bin=k_bin,subsets=subsets)
+        if ncore==-1:
+            ncore=0
+            if subsets is not None:
+                ncore=np.min([len(subsets),os.cpu_count()])
+        if ncore==0:
+           pmi = [foo_pmi(node) for node in self.G.nodes]
+        else:
+           pmi = runParallel(foo_pmi,self.G.nodes,ncore)
+        tmp_dict={}
+        for x in pmi:
+            if x is not None:
+                for a,b in x:
+                    tmp_dict.update({a:b})
+       
+        pmi=np.array([tmp_dict[edge]  for edge in self.G.edges])
+        if pmi.shape[1]==1:
+            pmi=pmi.flatten()
+        return pmi
+    def update_graph(self,G=None,nodes_property=None,edges_property=None,node_property_name='prop',edge_property_name='score'):
+        if G is None:
+            G=self.G
+        if G =='moral':
+            G=self.G_moral
+        update_graph(G,nodes_property=nodes_property,edges_property=edges_property,node_property_name=node_property_name,edge_property_name=edge_property_name)
+        
+
+
+def update_graph(G,nodes_property=None,edges_property=None,node_property_name='prop',edge_property_name='score'):
+    if nodes_property is not None:
+        update_nodes_graph(G,nodes_property,node_property_name)
+    if edges_property is not None:
+        update_edges_graph(G,edges_property,edge_property_name)
+def update_nodes_graph(G,nodes_property,node_property_name='prop'):
+    if type(nodes_property) != dict:
+        nodes_property=dict(zip(G.nodes,nodes_property))
+    nx.set_node_attributes(G, nodes_property, name=node_property_name)
+def update_edges_graph(G,edges_property,edge_property_name='score'):
+    if type(edges_property) != dict:
+        edges_property=dict(zip(G.edges,edges_property))
+    nx.set_edge_attributes(G, edges_property, name=edge_property_name)
+    
+   
+def Mixed_KSGm(x,y,k,onlyPos=True):
+     '''
+             Estimate the mutual information I(X;Y) of X and Y from samples {x_i, y_i}_{i=1}^N
+             Using *Mixed-KSG* mutual information estimator
+ 
+             Input: x: 2D array of size N*d_x (or 1D list of size N if d_x = 1)
+             y: 2D array of size N*d_y (or 1D list of size N if d_y = 1)
+             k: k-nearest neighbor parameter
+ 
+             Output: one number of I(X;Y)
+     '''
+     assert len(x)==len(y), "Lists should have same length"
+     assert k <= len(x)-1, "Set k smaller than num. samples - 1"
+
+     try:
+         N = len(x)
+         if x.ndim == 1:
+                 x = x.reshape((N,1))
+         dx = len(x[0])
+         if y.ndim == 1:
+                 y = y.reshape((N,1))
+         dy = len(y[0])
+         data = np.concatenate((x,y),axis=1)
+     
+         tree_xy = ss.cKDTree(data)
+         tree_x = ss.cKDTree(x)
+         tree_y = ss.cKDTree(y)
+     
+         knn_dis=np.array(tree_xy.query(data,k+1,p=float('inf'))[0][:,k])
+         j=np.where(knn_dis==0)[0]
+         if len(j)==0:
+             knn_dis-=1e-15
+             nx,ny=zip(*[[len(tree_x.query_ball_point(x[i],knn_dis[i],p=np.inf)),len(tree_y.query_ball_point(y[i],knn_dis[i],p=np.inf))] for i in range(N)])
+             I=digamma(k)+np.log(N)-np.mean(digamma(nx)+digamma(ny))
+         else:
+             knn_dis-=1e-15
+             kh=np.zeros(N)+digamma(k)
+             nx,ny=zip(*[[len(tree_x.query_ball_point(x[i],knn_dis[i],p=np.inf)), len(tree_y.query_ball_point(y[i],knn_dis[i],p=np.inf))] for i in range(N) if i not in j])
+             ck=[len(z) for z in tree_xy.query_ball_point(data[j],1e-15,p=np.inf)]
+             cx=[len(z) for z in tree_x.query_ball_point(x[j],1e-15,p=np.inf)]
+             cy=[len(z) for z in tree_y.query_ball_point(y[j],1e-15,p=np.inf)]
+             kh[-j.size:]=digamma(ck)
+             nx=list(nx)+cx
+             ny=list(ny)+cy
+             I=np.log(N)+np.mean(kh-digamma(nx)-digamma(ny))
+         if (onlyPos)&(I<0):
+             I=0.0 
+         return I
+
+
+     except ValueError:
+         print('Making discrete')
+         not_discrete_x=np.sum(np.unique(x,return_counts=True)[1]==1)
+         not_discrete_y=np.sum(np.unique(y,return_counts=True)[1]==1)
+         if (not_discrete_x<=1)|(not_discrete_x<=2):
+             return mi(x,y)
+         print ("check for error\nu\n: ",u,x,'\nv:\n',v,y)
+
+
