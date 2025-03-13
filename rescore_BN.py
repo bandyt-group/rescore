@@ -100,15 +100,20 @@ class BN_Rescore:
                     self.concat=out[0]
                 self.concat=np.vstack((self.concat,out[1:].astype(float)))
             data=self.concat                
+        ## Load file
+        if type(data)==str:
+            data=csvreader(data)
 
         ## Subset labels ##
-        if subsets != 'spatial':
-            if lengths is not None:
-                labelcol=np.insert(getlabelarray(lengths).astype(str),0,'label')
-                data=np.column_stack((data,labelcol))
-            self.subset_labels=data[1:,-1]
-            self.subset_label_set=np.sort(list(set(self.subset_labels)))
-            self.subset_labels_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set]
+        if subsets is not None:
+
+            if subsets != 'spatial':
+                if lengths is not None:
+                    labelcol=np.insert(getlabelarray(lengths).astype(str),0,'label')
+                    data=np.column_stack((data,labelcol))
+                self.subset_labels=data[1:,-1]
+                self.subset_label_set=np.sort(list(set(self.subset_labels)))
+                self.subset_labels_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set]
         
         ## Input variables and data with sorting ##
         self._input_data=data[1:]#.astype(float)
@@ -139,6 +144,7 @@ class BN_Rescore:
         if datatype is None:
             print('provide datatype= as either - "discrete" or "continuous"')
         if datatype=='discrete':
+            self.data=self.data.astype(float).astype(int)
             self.rescored_out=self.disc_MI_on_subsets(subsets=subsets,ncore=ncore)
             return
         if datatype=='continuous':
@@ -174,7 +180,6 @@ class BN_Rescore:
         if subsets == 'all':
             subsets=self.subset_labels_indx
         return [self.disc_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
-
 
 ### Continuous MI Functions ###
 
