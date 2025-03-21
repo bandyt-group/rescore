@@ -185,7 +185,7 @@ class BN_Rescore:
 
 ### Continuous MI Functions ###
 
-    def mi_Mixed_KSGm_on_edge(self,edge,k_bin=5):
+    def _mi_Mixed_KSGm_on_edge(self,edge,k_bin=5):
         u,v=edge
         x=self.data[:,self.map_variable[u]]
         y=self.data[:,self.map_variable[v]]
@@ -203,9 +203,10 @@ class BN_Rescore:
         if len(set(y))==1:
             return 0.0
         return Mixed_KSGm(x,y,k_bin)
-    def cont_MI_on_edges(self,edges,subset,k_bin=5,ncore=1):
-        func=partial(self._mi_Mixed_KSGm_on_edge_subset_data,subset=subset,k_bin=k_bin)
-        return runParallel(func,edges,ncore)
+    def cont_MI_on_edges(self,subset,edges,k_bin=5,ncore=1):
+        return np.array([self._mi_Mixed_KSGm_on_edge_subset_data(edge=ed,subset=subset) for ed in edges])
+#        func=partial(self._mi_Mixed_KSGm_on_edge_subset_data,subset=subset,k_bin=k_bin)
+#        return runParallel(func,edges,ncore)
     def cont_MI_on_subsets(self,edges=None,subsets=None,moral=False,k_bin=5,ncore=1):
         if edges is None:
             edges=self.G.edges
@@ -216,7 +217,9 @@ class BN_Rescore:
             return self.cont_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
         if subsets == 'all':
             subsets=self.subset_labels_indx
-        return [self.cont_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
+        func=partial(self.cont_MI_on_edges,edges=edges,ncore=ncore)
+        return runParallel(func,subsets,ncore)
+#        return [self.cont_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
     
 ## Spatial Continuous Data Functions ##
     def _mi_Mixed_KSGm_spatial(self,kernal,edge,k_bin=5):
