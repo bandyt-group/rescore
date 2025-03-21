@@ -90,7 +90,7 @@ def getlabelarray(lengths):
     return q
 
 class BN_Rescore:
-    def __init__(self,dotfile,files=None,data=None,lengths=None,subsets=None,discrete=False):
+    def __init__(self,dotfile,data=None,files=None,lengths=None,subsets=None,discrete=False):
         ## combine csv files ##
         if files is not None:
             self.concat=[]
@@ -105,7 +105,7 @@ class BN_Rescore:
             data=csvreader(data)
 
         ## Subset labels ##
-        if subsets is not None:
+        if subsets is None:
 
             if subsets != 'spatial':
                 if lengths is not None:
@@ -117,7 +117,9 @@ class BN_Rescore:
         
         ## Input variables and data with sorting ##
         self._input_data=data[1:]#.astype(float)
-        self._input_variables=data[0,:-1]
+        if discrete is not True:
+            self._input_data=self._input_data.astype(float)
+        self._input_variables=data[0]
         i_sort=np.argsort(self._input_variables)
         self.variables=self._input_variables[i_sort]
         self.data=self._input_data[:,i_sort]
