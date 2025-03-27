@@ -89,28 +89,38 @@ def getlabelarray(lengths):
         q[int_indx[i][0]:int_indx[i][1]]=i
     return q
 
+def combinecsvfiles(files):
+    concat=[]
+    lengths=[]
+    for i,f in enumerate(files):
+        out=csvreader(f)
+        lengths.append(out[1:].shape[0])
+        if i==0:
+            concat=out[:,np.argsort(out[0])]
+        if i!=0:
+            concat=np.vstack((concat,out[1:,np.argsort(out[0])].astype(float)))
+    indx=np.split(np.arange(0,concat[1:].shape[0]),np.cumsum(lengths[:-1]))
+    return concat,indx
+
 class BN_Rescore:
     def __init__(self,dotfile,data=None,files=None,lengths=None,subsets=None,discrete=False):
         ## combine csv files ##
         if files is not None:
-            self.concat=[]
-            for i,f in enumerate(files):
-                out=csvreader(f)
-                if i==0:
-                    self.concat=out[0]
-                self.concat=np.vstack((self.concat,out[1:].astype(float)))
-            data=self.concat                
+            data,self.subset_indx=combinecsvfiles(files)
         ## Load file
         if type(data)==str:
             data=csvreader(data)
 
-        ## Subset labels ##
-        if subsets is None:
+    
 
-            if subsets != 'spatial':
-                if lengths is not None:
-                    labelcol=np.insert(getlabelarray(lengths).astype(str),0,'label')
-                    data=np.column_stack((data,labelcol))
+        ## Subset labels ##
+        if subsets is not None:
+
+            if type(subsets)==list:
+                self.subset_indx=subsets
+                #labelcol=np.insert(getlabelarray(lengths).astype(str),0,'label')
+                #data=np.column_stack((data,labelcol))
+            if subsets=='column':
                 self.subset_labels=data[1:,-1]
                 self.subset_label_set=np.sort(list(set(self.subset_labels)))
                 self.subset_labels_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set]
@@ -325,8 +335,6 @@ class BN_Rescore:
             G=self.G_moral
         update_graph(G,nodes_property=nodes_property,edges_property=edges_property,node_property_name=node_property_name,edge_property_name=edge_property_name)
         
-
-
 def update_graph(G,nodes_property=None,edges_property=None,node_property_name='prop',edge_property_name='score'):
     if nodes_property is not None:
         update_nodes_graph(G,nodes_property,node_property_name)
