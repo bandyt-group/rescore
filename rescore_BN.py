@@ -111,20 +111,14 @@ class BN_Rescore:
         if type(data)==str:
             data=csvreader(data)
 
-    
-
         ## Subset labels ##
-        if subsets is not None:
+        if data[0,-1]=='label':
+            self.subset_labels=data[1:,-1]
+            self.subset_label_set=np.sort(list(set(self.subset_labels)))
+            self.subset_labels_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set] 
+        if type(subsets)==list:
+            self.subset_indx=subsets
 
-            if type(subsets)==list:
-                self.subset_indx=subsets
-                #labelcol=np.insert(getlabelarray(lengths).astype(str),0,'label')
-                #data=np.column_stack((data,labelcol))
-            if subsets=='column':
-                self.subset_labels=data[1:,-1]
-                self.subset_label_set=np.sort(list(set(self.subset_labels)))
-                self.subset_labels_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set]
-        
         ## Input variables and data with sorting ##
         self._input_data=data[1:]#.astype(float)
         if discrete is not True:
