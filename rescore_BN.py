@@ -89,11 +89,23 @@ def getlabelarray(lengths):
         q[int_indx[i][0]:int_indx[i][1]]=i
     return q
 
-def combinecsvfiles(files):
+def getunion(outs):
+    U=np.sort(np.unique(np.concatenate([out[0] for out in outs])))
+    return [aligndata(out,U) for out in outs]
+    
+def aligndata(data,un_labs):
+    m=np.zeros([data[1:].shape[0],un_labs.shape[0]]).T
+    for i,k in enumerate(np.where(np.in1d(un_labs,data[0])==True)[0]):
+        m[k]=data[1:][:,i]
+    return np.vstack((un_labs,m.T))
+
+def combinecsvfiles(files,union=False):
+    outs=[csvreader(f) for f in files]
+    if union:
+        outs=getunion(outs)     
     concat=[]
     lengths=[]
-    for i,f in enumerate(files):
-        out=csvreader(f)
+    for i,out in enumerate(outs):
         lengths.append(out[1:].shape[0])
         if i==0:
             concat=out[:,np.argsort(out[0])]
@@ -103,10 +115,10 @@ def combinecsvfiles(files):
     return concat,indx
 
 class BN_Rescore:
-    def __init__(self,dotfile,data=None,files=None,lengths=None,subsets=None,discrete=False):
+    def __init__(self,dotfile,data=None,files=None,union=False,subsets=None,discrete=False):
         ## combine csv files ##
         if files is not None:
-            data,self.subset_indx=combinecsvfiles(files)
+            data,self.subset_indx=combinecsvfiles(files,union=False)
         ## Load file
         if type(data)==str:
             data=csvreader(data)
@@ -115,7 +127,7 @@ class BN_Rescore:
         if data[0,-1]=='label':
             self.subset_labels=data[1:,-1]
             self.subset_label_set=np.sort(list(set(self.subset_labels)))
-            self.subset_labels_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set] 
+            self.subset_indx=[np.where(self.subset_labels==i)[0] for i in self.subset_label_set] 
         if type(subsets)==list:
             self.subset_indx=subsets
 
@@ -184,7 +196,7 @@ class BN_Rescore:
             subset=np.arange(self.n_cells)
             return self.disc_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
         if subsets == 'all':
-            subsets=self.subset_labels_indx
+            subsets=self.subset_indx
         return [self.disc_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
 
 ### Continuous MI Functions ###
@@ -220,7 +232,7 @@ class BN_Rescore:
             subset=np.arange(self.n_cells)
             return self.cont_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
         if subsets == 'all':
-            subsets=self.subset_labels_indx
+            subsets=self.subset_indx
         func=partial(self.cont_MI_on_edges,edges=edges,ncore=ncore)
         return runParallel(func,subsets,ncore)
 #        return [self.cont_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
