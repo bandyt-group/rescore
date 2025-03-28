@@ -185,10 +185,11 @@ class BN_Rescore:
         x=self.data[subset,self.map_variable[u]]
         y=self.data[subset,self.map_variable[v]]
         return mi([x,y])
-    def disc_MI_on_edges(self,edges,subset,ncore=4):
-        func=partial(self._mi_on_edge_subset_data,subset=subset)
-        return runParallel(func,edges,ncore)
-    def disc_MI_on_subsets(self,edges=None,subsets=None,moral=False,k_bin=5,ncore=4):
+    def disc_MI_on_edges(self,subset,edges):
+        return np.array([self._mi_on_edge_subset_data(edge=ed,subset=subset) for ed in edges])
+        #func=partial(self._mi_on_edge_subset_data,subset=subset)
+        #return runParallel(func,edges,ncore)
+    def disc_MI_on_subsets(self,edges=None,subsets=None,moral=False,ncore=4):
         if edges is None:
             edges=self.G.edges
         if moral:
@@ -198,7 +199,9 @@ class BN_Rescore:
             return self.disc_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
         if subsets == 'all':
             subsets=self.subset_indx
-        return [self.disc_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
+        func=partial(self.disc_MI_on_edges,edges=edges)
+        return runParallel(func,subsets,ncore)
+#        return [self.disc_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
 
 ### Continuous MI Functions ###
 
