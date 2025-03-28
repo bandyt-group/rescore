@@ -118,10 +118,13 @@ class BN_Rescore:
     def __init__(self,dotfile,data=None,files=None,union=False,subsets=None,discrete=False):
         ## combine csv files ##
         if files is not None:
-            data,self.subset_indx=combinecsvfiles(files,union=False)
+            data,self.subset_indx=combinecsvfiles(files,union=union)
         ## Load file
         if type(data)==str:
             data=csvreader(data)
+
+        ## discrete or continuous
+        self.discrete=discrete
 
         ## Subset labels ##
         if data[0,-1]=='label':
@@ -132,9 +135,11 @@ class BN_Rescore:
             self.subset_indx=subsets
 
         ## Input variables and data with sorting ##
-        self._input_data=data[1:]#.astype(float)
+        self._input_data=data[1:]
         if discrete is not True:
             self._input_data=self._input_data.astype(float)
+        if discrete:
+            self._input_data=self._input_data.astype(float).astype(int)
         self._input_variables=data[0]
         i_sort=np.argsort(self._input_variables)
         self.variables=self._input_variables[i_sort]
@@ -158,16 +163,12 @@ class BN_Rescore:
         self.map_variable=dict(zip(self.variables,np.arange(self.variables.size)))
 
 ## RESCORING function ##
-    def rescore(self,datatype=None,subsets='all',ncore=1):
-        if datatype is None:
-            print('provide datatype= as either - "discrete" or "continuous"')
-        if datatype=='discrete':
-            self.data=self.data.astype(float).astype(int)
+    def rescore(self,subsets='all',ncore=1):
+        if self.discrete:
             self.rescored_out=self.disc_MI_on_subsets(subsets=subsets,ncore=ncore)
             return
-        if datatype=='continuous':
-            self.rescored_out=self.cont_MI_on_subsets(subsets=subsets,ncore=ncore)
-            return
+        self.rescored_out=self.cont_MI_on_subsets(subsets=subsets,ncore=ncore)
+        return
 
 
 ## Discrete data MI functions ##
@@ -266,11 +267,11 @@ class BN_Rescore:
 ## Writing Rescored to output table ##
     def table(self):
         self.table=self.edges
-        for i,s in enumerate(self.subset_labels_indx):
+        for i,s in enumerate(self.subset_indx):
             self.table=np.column_stack((self.table,self.rescored_out[i]))
     def table_write(self,outfile):
         self.table()
-        subset_labels=np.array([f'subset{i+1}' for i in range(len(self.subset_labels_indx))])
+        subset_labels=np.array([f'subset{i+1}' for i in range(len(self.subset_indx))])
         title_row=np.insert(subset_labels,0,np.array(['source','target']))
         csvwriter(outfile,np.vstack((title_row,self.table)))
 
