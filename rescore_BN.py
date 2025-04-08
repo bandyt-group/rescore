@@ -89,6 +89,9 @@ def getlabelarray(lengths):
         q[int_indx[i][0]:int_indx[i][1]]=i
     return q
 
+def make_batches(total_len, batch_size):
+    return [(i, min(i + batch_size, total_len)) for i in range(0, total_len, batch_size)]
+
 def getunion(outs):
     U=np.sort(np.unique(np.concatenate([out[0] for out in outs])))
     return [aligndata(out,U) for out in outs]
@@ -187,9 +190,9 @@ class BN_Rescore:
         return mi([x,y])
     def disc_MI_on_edges(self,subset,edges):
         return np.array([self._mi_on_edge_subset_data(edge=ed,subset=subset) for ed in edges])
-        #func=partial(self._mi_on_edge_subset_data,subset=subset)
-        #return runParallel(func,edges,ncore)
-    def disc_MI_on_subsets(self,edges=None,subsets=None,moral=False,ncore=4):
+    def disc_MI_on_batch(self,batch,subsets,edges):
+        return [self.disc_MI_on_edges(subset=s,edges=edges) for s in subsets[batch[0]:batch[1]]]
+    def disc_MI_on_subsets(self,edges=None,subsets=None,moral=False,batches=None,ncore=4):
         if edges is None:
             edges=self.G.edges
         if moral:
@@ -199,10 +202,15 @@ class BN_Rescore:
             return self.disc_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
         if subsets == 'all':
             subsets=self.subset_indx
+            if batches is not None:
+                func=partial(self.disc_MI_on_batch,edge_list=edges)
+                return runParallel(func,batches,ncore=ncore)
         func=partial(self.disc_MI_on_edges,edges=edges)
         return runParallel(func,subsets,ncore)
 #        return [self.disc_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
-
+    #def disc_MI_on_batch(self,subsets,edges,batchs):
+    def disc_MI_on_batch(self, batch, edge_list):
+        return [self.disc_MI_on_edges(subset=s,edges=edge_list) for s in self.subset_indx[batch[0]:batch[1]]]
 ### Continuous MI Functions ###
 
     def _mi_Mixed_KSGm_on_edge(self,edge,k_bin=5):
