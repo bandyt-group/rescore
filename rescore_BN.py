@@ -130,6 +130,7 @@ class BN_Rescore:
         self.discrete=discrete
 
         ## Subset labels ##
+        self.subset_indx=subsets
         if data[0,-1]=='label':
             self.subset_labels=data[1:,-1]
             self.subset_label_set=np.sort(list(set(self.subset_labels)))
@@ -166,11 +167,11 @@ class BN_Rescore:
         self.map_variable=dict(zip(self.variables,np.arange(self.variables.size)))
 
 ## RESCORING function ##
-    def rescore(self,subsets='all',ncore=1):
+    def rescore(self,ncore=1):
         if self.discrete:
             self.rescored_out=self.disc_MI_on_subsets(subsets=subsets,ncore=ncore)
             return
-        self.rescored_out=self.cont_MI_on_subsets(subsets=subsets,ncore=ncore)
+        self.rescored_out=self.cont_MI_on_subsets(ncore=ncore)
         return
 
 
@@ -197,14 +198,16 @@ class BN_Rescore:
             edges=self.G.edges
         if moral:
             edges=self.G_moral.edges
-        if subsets is None:
+        if self.subset_indx is None:
             subset=np.arange(self.n_cells)
-            return self.disc_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
-        if subsets == 'all':
-            subsets=self.subset_indx
-            if batches is not None:
-                func=partial(self.disc_MI_on_batch,edge_list=edges)
-                return runParallel(func,batches,ncore=ncore)
+            func=partial(self._mi_on_edge_subset_data,subset=subset)
+            return runParallel(func,edges,ncore)
+#            return self.disc_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
+#        if subsets == 'all':
+        subsets=self.subset_indx
+        if batches is not None:
+          func=partial(self.disc_MI_on_batch,edge_list=edges)
+          return runParallel(func,batches,ncore=ncore)
         func=partial(self.disc_MI_on_edges,edges=edges)
         return runParallel(func,subsets,ncore)
 #        return [self.disc_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]
@@ -235,18 +238,17 @@ class BN_Rescore:
         return np.array([self._mi_Mixed_KSGm_on_edge_subset_data(edge=ed,subset=subset) for ed in edges])
 #        func=partial(self._mi_Mixed_KSGm_on_edge_subset_data,subset=subset,k_bin=k_bin)
 #        return runParallel(func,edges,ncore)
-    def cont_MI_on_subsets(self,edges=None,subsets=None,moral=False,k_bin=5,ncore=1):
+    def cont_MI_on_subsets(self,edges=None,moral=False,k_bin=5,ncore=1):
         if edges is None:
             edges=self.G.edges
         if moral:
             edges=self.G_moral.edges
-        if subsets is None:
+        if self.subset_indx is None:
             subset=np.arange(self.n_cells)
             func=partial(self._mi_Mixed_KSGm_on_edge_subset_data,subset=subset,k_bin=k_bin)
             return runParallel(func,edges,ncore)
 #            return self.cont_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
-        if subsets == 'all':
-            subsets=self.subset_indx
+        subsets=self.subset_indx
         func=partial(self.cont_MI_on_edges,edges=edges,ncore=ncore)
         return runParallel(func,subsets,ncore)
 #        return [self.cont_MI_on_edges(edges=edges,subset=s,ncore=ncore) for s in subsets]

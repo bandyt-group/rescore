@@ -37,7 +37,7 @@ outfile='out.csv'
 ## Run codes ##
 # Use the folloiwng for sets of trajectories
 Rescore=rBN.BN_Rescore(dotfile=dotfile,data=filename,files=files,union=union,subsets=subsets,discrete=discrete)
-Rescore.rescore(datatype=datatype,ncore=ncore)
+Rescore.rescore(ncore=ncore)
 Rescore.table_write(outfile)
 
 ##
