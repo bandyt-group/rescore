@@ -169,7 +169,7 @@ class BN_Rescore:
 ## RESCORING function ##
     def rescore(self,ncore=1):
         if self.discrete:
-            self.rescored_out=self.disc_MI_on_subsets(subsets=subsets,ncore=ncore)
+            self.rescored_out=self.disc_MI_on_subsets(ncore=ncore)
             return
         self.rescored_out=self.cont_MI_on_subsets(ncore=ncore)
         return
@@ -282,11 +282,17 @@ class BN_Rescore:
 ## Writing Rescored to output table ##
     def table(self):
         self.table=self.edges
+        if self.subset_indx is None:
+            self.table=np.column_stack((self.table,self.rescored_out))
+            return
         for i,s in enumerate(self.subset_indx):
             self.table=np.column_stack((self.table,self.rescored_out[i]))
     def table_write(self,outfile):
         self.table()
-        subset_labels=np.array([f'subset{i+1}' for i in range(len(self.subset_indx))])
+        if self.subset_indx is None:
+            subset_labels=['rescored']
+        if self.subset_indx is not None: 
+            subset_labels=np.array([f'subset{i+1}' for i in range(len(self.subset_indx))])
         title_row=np.insert(subset_labels,0,np.array(['source','target']))
         csvwriter(outfile,np.vstack((title_row,self.table)))
 
