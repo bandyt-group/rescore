@@ -242,7 +242,9 @@ class BN_Rescore:
             edges=self.G_moral.edges
         if subsets is None:
             subset=np.arange(self.n_cells)
-            return self.cont_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
+            func=partial(self._mi_Mixed_KSGm_on_edge_subset_data,subset=subset,k_bin=k_bin)
+            return runParallel(func,edges,ncore)
+#            return self.cont_MI_on_edges(edges=edges,subset=subset,ncore=ncore)
         if subsets == 'all':
             subsets=self.subset_indx
         func=partial(self.cont_MI_on_edges,edges=edges,ncore=ncore)
