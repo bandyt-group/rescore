@@ -130,7 +130,7 @@ class BN_Rescore:
         self.discrete=discrete
 
         ## Subset labels ##
-        self.subset_indx=subsets
+        #self.subset_indx=subsets
         if data[0,-1]=='label':
             self.subset_labels=data[1:,-1]
             self.subset_label_set=np.sort(list(set(self.subset_labels)))
