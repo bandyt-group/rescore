@@ -433,7 +433,7 @@ def Mixed_KSGm(x,y,k,onlyPos=True):
          not_discrete_x=np.sum(np.unique(x,return_counts=True)[1]==1)
          not_discrete_y=np.sum(np.unique(y,return_counts=True)[1]==1)
          if (not_discrete_x<=1)|(not_discrete_x<=2):
-             return mi(x,y)
+             return mi((x,y))
          print ("check for error\nu\n: ",u,x,'\nv:\n',v,y)
 
 
