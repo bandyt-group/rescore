@@ -56,9 +56,10 @@ You may provide data in one of two ways:
 #### Option A — Multiple trajectory files
 
 files = ['Rep1.csv', 'Rep2.csv', 'Rep3.csv']
-
 union = False
+
 filename = None
+
 subsets = None
 
 Use when your dataset is split across multiple replicates.  
