@@ -41,7 +41,7 @@ Modify this line inside `run.py` to match the location of your module:
 sys.path.append('/path/to/rescore/')
 ```
 
-## Input Requirements
+## Input Requirements (Change in `run.py`)
 
 ### 1. Bayesian Network DOT File
 
@@ -113,5 +113,13 @@ ncore = 3
 ```
 
 ---
+
+## Run from command line
+
+```bash
+python run.py
+```
+
+
 
 
