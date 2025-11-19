@@ -37,7 +37,9 @@ Typical dependencies include:
 
 Modify this line inside `run.py` to match the location of your module:
 
+```python
 sys.path.append('/path/to/rescore/')
+```
 
 ## Input Requirements
 
@@ -45,7 +47,9 @@ sys.path.append('/path/to/rescore/')
 
 Provide the path to a `.dot` file:
 
+```python
 dotfile = '/path/to/dotfile'
+```
 
 ---
 
@@ -67,9 +71,11 @@ If `union = True`, labels will be merged across files.
 
 #### Option B — Single combined file
 
+```python
 filename = 'filename.csv'
 files = None
 subsets = None
+```
 
 Use when your data is already merged.  
 The file must contain a `label` column.  
@@ -81,6 +87,31 @@ If not, provide subset indices manually through `subsets`.
 
 Specify whether your data is discrete or continuous:
 
+```python
 discrete = True
+```
+
+---
+
+### 4. Output File
+
+```python
+outfile = 'out.csv'
+```
+
+---
+
+### 5. Parallelization
+
+Choose the number of CPU cores:
+
+Suggested: use one core per subset.
+
+
+```python
+ncore = 3
+```
+
+---
 
 
