@@ -120,6 +120,18 @@ ncore = 3
 python run.py
 ```
 
+## Example Output (subset of `out.csv`)
 
+Below is a sample of what the output file may look like.  
+Source and target columns give the edges in the Bayesian network.  
+Remaining columns represent rescored values for each replicate.  
+(Values are for show only)
 
+| source | target | Rep1   | Rep2   | Rep3   |
+|--------|--------|--------|--------|--------|
+| A      | B      | 0.1832 | 0.9344 | 0.5210 |
+| C      | D      | 0.7729 | 0.1043 | 0.6637 |
+| E      | F      | 0.2285 | 0.5830 | 0.9831 |
+| G      | H      | 0.9013 | 0.3711 | 0.2476 |
+| I      | J      | 0.4520 | 0.7792 | 0.6184 |
 
