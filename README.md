@@ -78,7 +78,7 @@ subsets = None
 ```
 
 Use when your data is already merged.  
-The file must contain a `label` column.  
+The file must contain a `label` column as the last column denoting the subsets to rescore.  
 If not, provide subset indices manually through `subsets`.
 
 ---
