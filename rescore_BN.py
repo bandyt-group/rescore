@@ -97,7 +97,7 @@ def getunion(outs):
     
 def aligndata(data,un_labs):
     m=np.zeros([data[1:].shape[0],un_labs.shape[0]]).T
-    for i,k in enumerate(np.where(np.in1d(un_labs,data[0])==True)[0]):
+    for i,k in enumerate(np.where(np.isin(un_labs,data[0])==True)[0]):
         m[k]=data[1:][:,i]
     return np.vstack((un_labs,m.T))
 
@@ -156,7 +156,7 @@ class BN_Rescore:
         self.varsNotInG=np.setdiff1d(self.variables,self.nodes)
 
         if len(self.varsNotInG)>0:
-            i=~np.in1d(self.variables,self.varsNotInG)
+            i=~np.isin(self.variables,self.varsNotInG)
             self.data=self.data[:,i]
             self.variables=self.variables[i]
         self.mapVarNodes=np.searchsorted(self.variables,self.nodes)
