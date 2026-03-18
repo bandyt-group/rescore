@@ -361,7 +361,38 @@ class BN_Rescore:
         if G =='moral':
             G=self.G_moral
         update_graph(G,nodes_property=nodes_property,edges_property=edges_property,node_property_name=node_property_name,edge_property_name=edge_property_name)
-        
+
+## Networkx functions ###
+
+def build_graphs(table, directed=False):
+    sources = table[:, 0]
+    targets = table[:, 1]
+    weights = table[:, 2:].astype(float)
+    n_edges, n_times = weights.shape
+    GraphClass = nx.DiGraph if directed else nx.Graph
+    graphs = []
+    edge_pairs = list(zip(sources, targets))
+    for t in range(n_times):
+        G = GraphClass()
+        weighted_edges = [
+            (u, v, weights[i, t])
+            for i, (u, v) in enumerate(edge_pairs)]
+        G.add_weighted_edges_from(weighted_edges)
+        graphs.append(G)
+    return graphs
+
+def weighted_hamming_distance(G1, G2, weight='weight'):
+    d = 0.0
+    n_edges = 0
+    for u, v in G1.edges():
+        w1 = G1[u][v].get(weight, 0.0)
+        w2 = G2[u][v].get(weight, 0.0)
+        d += abs(w1 - w2)
+        n_edges += 1
+    return d
+
+
+ 
 def update_graph(G,nodes_property=None,edges_property=None,node_property_name='prop',edge_property_name='score'):
     if nodes_property is not None:
         update_nodes_graph(G,nodes_property,node_property_name)
