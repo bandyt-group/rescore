@@ -129,6 +129,10 @@ class BN_Rescore:
         self.discrete=discrete
 
         ## Subset labels ##
+        if subsets is None:
+            self.subset_label_set=np.array([0])
+            self.subset_indx=[list(np.arange(len(data[1:])))]
+
         #self.subset_indx=subsets
         if data[0,-1]=='label':
             self.subset_labels=data[1:,-1]
